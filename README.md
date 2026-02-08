@@ -10,9 +10,9 @@ A custom status line for [Claude Code](https://claude.ai/claude-code) that shows
 
 The context percentage changes color based on usage:
 
-- **Default** (0-29%) -- plenty of room
-- **Yellow** (30-60%) -- getting there
-- **Red** (61-100%) -- running low, consider compacting
+- **Default** (0-30%) -- smart zone
+- **Orange** (31-60%) -- getting into the dumb zone
+- **Red** (61-100%) -- really dumb zone, consider compacting
 
 ## Prerequisites
 
