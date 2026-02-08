@@ -5,13 +5,13 @@ A custom status line for [Claude Code](https://claude.ai/claude-code) that shows
 ## What it looks like
 
 ```
-Claude Opus 4.6 | context 42%
+[Claude Opus 4.6] context 42%
 ```
 
 The context percentage changes color based on usage:
 
-- **Green** (0-30%) -- plenty of room
-- **Yellow** (31-60%) -- getting there
+- **Default** (0-29%) -- plenty of room
+- **Yellow** (30-60%) -- getting there
 - **Red** (61-100%) -- running low, consider compacting
 
 ## Prerequisites
@@ -61,10 +61,9 @@ The context percentage changes color based on usage:
 Claude Code pipes a JSON object to the status line script via stdin on each update. The JSON contains:
 
 - `model.display_name` -- the active model (e.g., "Claude Opus 4.6")
-- `context_window.context_window_size` -- total context window in tokens
-- `context_window.current_usage` -- current token usage breakdown
+- `context_window.used_percentage` -- what percentage of the context window is in use
 
-The script uses `jq` to parse this JSON, calculates what percentage of the context window is in use, and outputs an ANSI color-coded string.
+The script uses `jq` to parse this JSON and outputs an ANSI color-coded string.
 
 For more details, see the [Claude Code statusLine documentation](https://code.claude.com/docs/en/statusline).
 
@@ -72,7 +71,7 @@ For more details, see the [Claude Code statusLine documentation](https://code.cl
 
 The color thresholds and output format are easy to adjust in `statusline.sh`:
 
-- Change the percentage breakpoints in the `get_color()` function (default: 30% and 60%)
+- Change the percentage breakpoints in the `if/elif/else` block (default: 30% and 60%)
 - Modify the `echo` line at the bottom to change what gets displayed
 - Swap the ANSI color codes at the top for your preferred colors
 
