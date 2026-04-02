@@ -4,13 +4,13 @@ A custom status line for [Claude Code](https://claude.ai/claude-code) that shows
 
 ## What it looks like
 
-![Status line preview showing color-coded context usage](statusline-preview.png)
-
 The context percentage changes color based on usage:
 
 - **Default** (0-30%) -- smart zone
 - **Orange** (31-60%) -- getting into the dumb zone
 - **Red** (61-100%) -- really dumb zone, consider compacting
+
+![Status line preview showing color-coded context usage](statusline-preview.png)
 
 ## macOS / Linux
 
