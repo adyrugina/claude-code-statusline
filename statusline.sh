@@ -1,17 +1,17 @@
-#!/bin/bash
+#!/bin/sh
 input=$(cat)
+model=$(echo "$input" | jq -r '.model.display_name // "unknown"')
+used=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
+pct=$(printf "%.0f" "$used")
 
-MODEL=$(echo "$input" | jq -r '.model.display_name')
-PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
-
-# Standard ANSI colors
-ORANGE='\033[38;5;208m'
-RED='\033[31m'
-RESET='\033[0m'
-
-# Color based on context pressure
-if [ "$PCT" -ge 61 ]; then COLOR="$RED"
-elif [ "$PCT" -ge 31 ]; then COLOR="$ORANGE"
-else COLOR=""; fi
-
-echo -e "[$MODEL] context ${COLOR}${PCT}%${COLOR:+${RESET}}"
+if [ "$pct" -le 30 ]; then
+  color=""
+  reset=""
+elif [ "$pct" -le 60 ]; then
+  color="\033[38;5;208m"
+  reset="\033[0m"
+else
+  color="\033[31m"
+  reset="\033[0m"
+fi
+printf "%s | context: %b%s%%%b\n" "$model" "$color" "$pct" "$reset"
