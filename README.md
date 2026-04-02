@@ -10,7 +10,7 @@ The context percentage changes color based on usage:
 - **Orange** (31-60%) -- getting into the dumb zone
 - **Red** (61-100%) -- really dumb zone, consider compacting
 
-![Status line preview showing color-coded context usage](statusline-preview.png)
+![Status line preview showing color-coded context usage](statusline-preview-v2.png)
 
 ## macOS / Linux
 
