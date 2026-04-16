@@ -16,8 +16,8 @@ The script uses **dynamic thresholds** based on context window size, because 1M-
 
 | | Default | Orange | Red |
 |---|---|---|---|
-| **200K models** (Sonnet, Haiku) | 0--30% | 31--60% | 61%+ |
-| **1M models** (Opus) | 0--15% | 16--35% | 36%+ |
+| **200K models** (Sonnet, Haiku) | 0-30% | 31-60% | 61%+ |
+| **1M models** (Opus) | 0-15% | 16-35% | 36%+ |
 
 The model name is shortened from `(1M context)` to `(1M)` to save space.
 
