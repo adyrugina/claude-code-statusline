@@ -1,16 +1,33 @@
 # claude-code-statusline
 
-A custom status line for [Claude Code](https://claude.ai/claude-code) that shows the active model and context window usage with color-coded indicators. Works on macOS, Linux, and Windows.
+A custom status line for [Claude Code](https://claude.ai/claude-code) that shows the active model, context window usage with color-coded indicators, rate limits, and your current working directory. Works on macOS, Linux, and Windows.
 
 ## What it looks like
 
-The context percentage changes color based on usage:
+![Status line preview showing model, context usage, rate limits, and folder path](statusline-preview.png)
 
-- **Default** (0-30%) -- smart zone
-- **Orange** (31-60%) -- getting into the dumb zone
-- **Red** (61-100%) -- really dumb zone, consider compacting
+**Line 1:** Model name | context usage (color-coded) | rate limits (dim)
+**Line 2:** Current working directory relative to home (dim)
 
-![Status line preview showing color-coded context usage](statusline-preview-v2.png)
+### Color thresholds
+
+The script uses **dynamic thresholds** based on context window size, because 1M-context models degrade earlier in absolute token terms:
+
+| | Default | Orange | Red |
+|---|---|---|---|
+| **200K models** (Sonnet, Haiku) | 0--30% | 31--60% | 61%+ |
+| **1M models** (Opus) | 0--15% | 16--35% | 36%+ |
+
+The model name is shortened from `(1M context)` to `(1M)` to save space.
+
+### Rate limits
+
+When available, the status line shows two rate limit indicators in dim text:
+
+- **now** -- your 5-hour rolling window usage
+- **week** -- your 7-day rolling window usage
+
+These fields appear after the first API response in a session.
 
 ## macOS / Linux
 
@@ -47,7 +64,7 @@ The context percentage changes color based on usage:
    {
      "statusLine": {
        "type": "command",
-       "command": "~/.claude/statusline.sh"
+       "command": "sh ~/.claude/statusline.sh"
      }
    }
    ```
@@ -98,18 +115,20 @@ Claude Code pipes a JSON object to the status line script via stdin on each upda
 
 - `model.display_name` -- the active model (e.g., "Opus 4.6 (1M context)")
 - `context_window.used_percentage` -- what percentage of the context window is in use
+- `context_window.context_window_size` -- the total context window size in tokens
+- `rate_limits.five_hour.used_percentage` -- 5-hour rolling rate limit usage
+- `rate_limits.seven_day.used_percentage` -- 7-day rolling rate limit usage
 
-The script parses this JSON and outputs an ANSI color-coded string.
+The script parses this JSON and outputs ANSI color-coded text across two lines.
 
 For more details, see the [Claude Code statusLine documentation](https://docs.anthropic.com/en/docs/claude-code/settings#status-bar).
 
 ## Customization
 
-The color thresholds and output format are easy to adjust:
-
-- Change the percentage breakpoints in the `if/elif/else` block (default: 30% and 60%)
-- Modify the output format line to change what gets displayed
-- Swap the ANSI color codes for your preferred colors
+- **Thresholds**: Change `warn` and `danger` values in the `if/elif/else` block for each window size
+- **Colors**: Swap the ANSI color codes (orange = `38;5;208`, red = `31`, dim = `38;5;240`)
+- **Rate limits**: Remove the rate limit section if you don't need it
+- **Folder path**: Remove the folder path section or adjust the path logic for your setup
 
 ## License
 
