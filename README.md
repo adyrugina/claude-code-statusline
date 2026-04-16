@@ -7,6 +7,7 @@ A custom status line for [Claude Code](https://claude.ai/claude-code) that shows
 ![Status line preview showing model, context usage, rate limits, and folder path](statusline-preview.png)
 
 **Line 1:** Model name | context usage (color-coded) | rate limits (dim)
+
 **Line 2:** Current working directory relative to home (dim)
 
 ### Color thresholds
