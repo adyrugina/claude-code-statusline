@@ -1,41 +1,48 @@
 # claude-code-statusline
 
-A custom status line for [Claude Code](https://claude.ai/claude-code) that shows the active model, context window usage with color-coded indicators, rate limits, and your current working directory. Works on macOS, Linux, and Windows.
+A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-code): active model and effort level, context window usage with dynamic colour thresholds, and rate limit usage with a live countdown to the next reset. Works on macOS, Linux, and Windows.
 
 ## What it looks like
 
-![Status line preview showing model, context usage, rate limits, and folder path](statusline-preview.png)
+![Status line preview showing three pills: model with effort level, context usage, and rate limit with reset countdown](statusline-preview.png)
 
-**Line 1:** Model name | context usage (color-coded) | rate limits (dim)
+One line, three rounded pills:
 
-**Line 2:** Current working directory relative to home (dim)
+```
+( opus · high )  ( 22% )  ( ⏳61% · 1h29 )
+```
 
-### Color thresholds
+| Pill | Content |
+|---|---|
+| **Model** | Model name, lowercased (`opus`, `sonnet`), plus the effort level when set (`opus · high`) |
+| **Context** | Percentage of the context window in use — quiet grey by default, orange/red as it climbs |
+| **Rate limit** | ⏳ 5-hour window usage and time until the window resets (`1h29`, `45m`) — appears once rate limit data is available |
 
-The script uses **dynamic thresholds** based on context window size, because 1M-context models degrade earlier in absolute token terms:
+If the script receives bad input or `jq` is missing, it degrades to a single plain `claude` pill instead of a broken or blank bar.
 
-| | Default | Orange | Red |
+### Colour thresholds
+
+**Context pill** — thresholds adapt to the context window size, because 1M-context models degrade earlier in absolute token terms:
+
+| | Quiet | Orange | Red |
 |---|---|---|---|
-| **200K models** (Sonnet, Haiku) | 0-30% | 31-60% | 61%+ |
-| **1M models** (Opus) | 0-15% | 16-35% | 36%+ |
+| **200K models** | 0–30% | 31–60% | 61%+ |
+| **1M models** | 0–15% | 16–35% | 36%+ |
 
-The model name is shortened from `(1M context)` to `(1M)` to save space.
+**Rate limit pill** — orange at 50% of the 5-hour window, red at 75%.
 
-### Rate limits
+## Requirements
 
-When available, the status line shows two rate limit indicators in dim text:
-
-- **now** -- your 5-hour rolling window usage
-- **week** -- your 7-day rolling window usage
-
-These fields appear after the first API response in a session.
+- A font with **Powerline glyphs** — the pill caps are U+E0B6 / U+E0B4 half-circles. Any [Nerd Font](https://www.nerdfonts.com/) works; some terminals (e.g. Warp) bundle these glyphs out of the box. Without them the caps render as missing-glyph boxes.
+- A **truecolor-capable terminal** (Warp, iTerm2, WezTerm, Windows Terminal, most modern emulators) — the base pill uses 24-bit colour.
+- The base pill colour (`#42465a`) is tuned for a **dark theme**. On a light theme, change `PILL_BG` (see [Customization](#customization)).
 
 ## macOS / Linux
 
 ### Prerequisites
 
 - [Claude Code](https://claude.ai/claude-code) CLI installed
-- [`jq`](https://jqlang.github.io/jq/) -- a command-line JSON processor
+- [`jq`](https://jqlang.github.io/jq/) — a command-line JSON processor
   - macOS: `brew install jq`
   - Linux: `apt install jq` or `dnf install jq`
 
@@ -65,12 +72,13 @@ These fields appear after the first API response in a session.
    {
      "statusLine": {
        "type": "command",
-       "command": "sh ~/.claude/statusline.sh"
+       "command": "sh ~/.claude/statusline.sh",
+       "refreshInterval": 60
      }
    }
    ```
 
-   If you already have a `settings.json`, just add the `"statusLine"` key to your existing object.
+   If you already have a `settings.json`, just add the `"statusLine"` key to your existing object. `refreshInterval` (in seconds) re-runs the script once a minute so the reset countdown keeps ticking while the session is idle — without it, the status line only updates on message events.
 
 5. Restart Claude Code. The status line will appear at the bottom of the terminal.
 
@@ -80,6 +88,7 @@ These fields appear after the first API response in a session.
 
 - [Claude Code](https://claude.ai/claude-code) CLI installed
 - PowerShell (included with Windows)
+- Windows Terminal (or another truecolor terminal) with a Nerd Font configured
 
 ### Installation
 
@@ -101,7 +110,8 @@ These fields appear after the first API response in a session.
    {
      "statusLine": {
        "type": "command",
-       "command": "powershell -NoProfile -File C:/Users/YOUR-USERNAME/.claude/statusline.ps1"
+       "command": "powershell -NoProfile -File C:/Users/YOUR-USERNAME/.claude/statusline.ps1",
+       "refreshInterval": 60
      }
    }
    ```
@@ -110,26 +120,31 @@ These fields appear after the first API response in a session.
 
 4. Restart Claude Code. The status line will appear at the bottom of the terminal.
 
+> The PowerShell port mirrors the shell script one-to-one but has had less real-world testing than the macOS/Linux version — issues and PRs welcome.
+
 ## How it works
 
-Claude Code pipes a JSON object to the status line script via stdin on each update. The JSON contains:
+Claude Code pipes a JSON object to the status line script via stdin on each update. The script uses these fields:
 
-- `model.display_name` -- the active model (e.g., "Opus 4.6 (1M context)")
-- `context_window.used_percentage` -- what percentage of the context window is in use
-- `context_window.context_window_size` -- the total context window size in tokens
-- `rate_limits.five_hour.used_percentage` -- 5-hour rolling rate limit usage
-- `rate_limits.seven_day.used_percentage` -- 7-day rolling rate limit usage
+- `model.display_name` — the active model (e.g. `"Opus 4.8 (1M context)"`); the first word is shown, lowercased
+- `effort.level` — the configured effort level (e.g. `"high"`), appended to the model pill when present
+- `context_window.used_percentage` — how much of the context window is in use
+- `context_window.context_window_size` — total window size in tokens, used to pick the colour thresholds
+- `rate_limits.five_hour.used_percentage` — 5-hour rolling rate limit usage
+- `rate_limits.five_hour.resets_at` — epoch timestamp of the next rate limit reset, turned into the countdown
 
-The script parses this JSON and outputs ANSI color-coded text across two lines.
+The shell version does all parsing and arithmetic in a **single `jq` pass** — including rounding (avoids `printf %.0f`, which breaks under comma-decimal locales) and the reset countdown (via `jq`'s `now`). The pill caps are emitted as octal UTF-8 escapes so no editor or copy-paste step can strip them.
 
-For more details, see the [Claude Code statusLine documentation](https://docs.anthropic.com/en/docs/claude-code/settings#status-bar).
+For more details, see the [Claude Code status line documentation](https://code.claude.com/docs/en/statusline).
 
 ## Customization
 
-- **Thresholds**: Change `warn` and `danger` values in the `if/elif/else` block for each window size
-- **Colors**: Swap the ANSI color codes (orange = `38;5;208`, red = `31`, dim = `38;5;240`)
-- **Rate limits**: Remove the rate limit section if you don't need it
-- **Folder path**: Remove the folder path section or adjust the path logic for your setup
+All knobs are at the top of each script:
+
+- **Colours** — SGR parameter strings: `"2;R;G;B"` (truecolor) or `"5;N"` (256-colour). `PILL_BG` is the base pill background; pick something a half-step lighter than your terminal background so pills read as raised
+- **Context thresholds** — `warn` / `danger` values per window size
+- **Rate limit thresholds** — the `50` / `75` comparisons in the rate pill section
+- **Drop the rate pill** — remove the rate limit section if you don't need it
 
 ## License
 
