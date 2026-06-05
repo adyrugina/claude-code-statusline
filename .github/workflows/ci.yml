@@ -78,6 +78,7 @@ jobs:
           has "12.999 rounds -> \$13.00" '\$13\.00' "$o"
           o=$(run '{"model":{"display_name":"Opus 4.8"},"context_window":{"used_percentage":5}}')
           hasnt "absent cost -> no \$ pill" '\$' "$o"
+          hasnt "absent rate limits -> no hourglass" "$(printf '\342\217\263')" "$o"
 
           echo "Happy path: full four-pill line"
           future=$(( $(date +%s) + 8100 ))
@@ -148,6 +149,7 @@ jobs:
           Has '12.999 rounds -> $13.00' '\$13\.00' $o
           $o = Run @{ model=@{display_name='Opus 4.8'}; context_window=@{used_percentage=5} }
           Hasnt 'absent cost -> no $ pill' '\$' $o
+          Hasnt 'absent rate limits -> no hourglass' ([string][char]0x23F3) $o
 
           "Happy path: full four-pill line"
           $future = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 8100

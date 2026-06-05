@@ -47,6 +47,12 @@ if ($null -eq $data) {
 # sequences can't retitle the window, clear the screen, or smuggle a link
 function Clean($s) { "$s" -replace '[\x00-\x1F]', '' }
 
+# Coerce a field to a number while keeping "absent" distinct: $null stays
+# $null, junk becomes $null, numbers and numeric strings convert. A bare
+# -as [double] would turn $null into 0.0 - which made optional pills
+# (rate limit, cost) render as 0% / $0.00 instead of being omitted
+function Num($v) { if ($null -eq $v) { $null } else { $v -as [double] } }
+
 # Model: first word of the display name, lowercased (e.g. "opus")
 $model = ((Clean $data.model.display_name) -split ' ')[0].ToLower()
 if ([string]::IsNullOrEmpty($model)) { $model = 'unknown' }
@@ -55,12 +61,12 @@ if ([string]::IsNullOrEmpty($model)) { $model = 'unknown' }
 $effort = Clean $data.effort.level
 if (-not [string]::IsNullOrEmpty($effort)) { $model = "$model $Dot $effort" }
 
-# -as [double] coerces null/number/numeric-string to a number (or $null on
-# junk), so Round/comparisons never throw on an unexpected type
-$used = $data.context_window.used_percentage -as [double]
+# Num coerces null/number/numeric-string safely, so Round/comparisons
+# never throw on an unexpected type
+$used = Num $data.context_window.used_percentage
 if ($null -eq $used) { $used = 0 }
 $pct = [int][math]::Round($used)
-$window = $data.context_window.context_window_size -as [double]
+$window = Num $data.context_window.context_window_size
 if ($null -eq $window) { $window = 200000 }
 
 # Dynamic thresholds based on context window size
@@ -88,7 +94,7 @@ if ($pct -le $warn) {
 $rate_str = ''
 $rate_bg = $PILL_BG
 $rate_fg = $PILL_TEXT
-$rpct = $data.rate_limits.five_hour.used_percentage -as [double]
+$rpct = Num $data.rate_limits.five_hour.used_percentage
 if ($null -ne $rpct) {
     $rpct = [int][math]::Round($rpct)
     # Same colours as the context pill: orange at 50%, red at 75%
@@ -99,7 +105,7 @@ if ($null -ne $rpct) {
     }
     # No space after the hourglass - its double-width cell is the gap
     $rate_str = "${Hourglass}${rpct}%"
-    $resets = $data.rate_limits.five_hour.resets_at -as [double]
+    $resets = Num $data.rate_limits.five_hour.resets_at
     if ($null -ne $resets) {
         $rem = [long]$resets - [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
         if ($rem -gt 0) {
@@ -119,7 +125,7 @@ if ($null -ne $rpct) {
 # converted to integer cents and formatted with integer arithmetic so
 # the output stays invariant under comma-decimal cultures.
 $cost_str = ''
-$cost = $data.cost.total_cost_usd -as [double]
+$cost = Num $data.cost.total_cost_usd
 if ($null -ne $cost) {
     $cents = [long][math]::Round($cost * 100)
     $cost_str = '${0}.{1:d2}' -f [long][math]::Floor($cents / 100), [int]($cents % 100)
