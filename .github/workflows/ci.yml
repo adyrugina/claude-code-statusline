@@ -11,7 +11,7 @@ jobs:
     name: shellcheck (statusline.sh)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: shellcheck --shell=sh statusline.sh
 
   shell-tests:
@@ -22,7 +22,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Ensure jq is available
         shell: bash
         run: |
@@ -91,7 +91,7 @@ jobs:
     name: PSScriptAnalyzer (statusline.ps1)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Analyze
         shell: pwsh
         run: |
@@ -108,7 +108,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run regression battery
         shell: pwsh
         run: |
