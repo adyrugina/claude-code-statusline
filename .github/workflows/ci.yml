@@ -15,31 +15,35 @@ jobs:
       - run: shellcheck --shell=sh statusline.sh
 
   shell-tests:
-    name: shell tests
+    # statusline.sh ships for Linux + macOS; prove it under every POSIX shell a
+    # user is likely to have it sourced from (sh / bash / zsh), not just /bin/sh.
+    name: shell tests (${{ matrix.os }} / ${{ matrix.interp }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        interp: [sh, bash, zsh]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      - name: Ensure jq is available
+      - name: Ensure jq + ${{ matrix.interp }} are available
         shell: bash
         run: |
-          if ! command -v jq >/dev/null; then
-            if [ "$RUNNER_OS" = "macOS" ]; then
-              brew install jq
-            else
-              sudo apt-get update && sudo apt-get install -y jq
-            fi
+          need="jq ${{ matrix.interp }}"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            for p in $need; do command -v "$p" >/dev/null || brew install "$p"; done
+          else
+            sudo apt-get update
+            for p in $need; do command -v "$p" >/dev/null || sudo apt-get install -y "$p"; done
           fi
       - name: Run regression battery
         shell: bash
         run: |
           set -u
+          interp=${{ matrix.interp }}
           script=statusline.sh
           pass=0; fail=0
-          run() { printf '%s' "$1" | sh "$script"; }
+          run() { printf '%s' "$1" | "$interp" "$script"; }
           has()   { printf '%s' "$3" | grep -q "$2" && { echo "  ok   $1"; pass=$((pass+1)); } || { echo "  FAIL $1 -- want /$2/ in: $(printf '%s' "$3" | cat -v | head -c160)"; fail=$((fail+1)); }; }
           hasnt() { printf '%s' "$3" | grep -q "$2" && { echo "  FAIL $1 -- unexpected /$2/"; fail=$((fail+1)); } || { echo "  ok   $1"; pass=$((pass+1)); }; }
 
@@ -55,7 +59,7 @@ jobs:
           # Proof is the BEL byte (0x07, never emitted by pill rendering) is
           # gone - not the inert letters left behind once ESC/BEL are removed.
           evil=$(jq -n --arg d "$(printf 'Op\033]0;HIJACK\007us 4.8')" '{model:{display_name:$d},context_window:{used_percentage:5,context_window_size:200000}}')
-          o=$(printf '%s' "$evil" | sh "$script")
+          o=$(printf '%s' "$evil" | "$interp" "$script")
           bel=$(printf '\007')
           case "$o" in
             *"$bel"*) echo "  FAIL BEL control byte leaked"; fail=$((fail+1)) ;;
@@ -64,14 +68,14 @@ jobs:
 
           echo "SEC: command injection stays blocked"
           rm -f .marker
-          jq -n '{model:{display_name:"x $(touch .marker) `touch .marker`"},context_window:{used_percentage:5}}' | sh "$script" >/dev/null
+          jq -n '{model:{display_name:"x $(touch .marker) `touch .marker`"},context_window:{used_percentage:5}}' | "$interp" "$script" >/dev/null
           [ -e .marker ] && { echo "  FAIL injection executed"; fail=$((fail+1)); rm -f .marker; } || { echo "  ok   injection blocked"; pass=$((pass+1)); }
 
           echo "Fallback: malformed / empty -> one plain pill, exit 0"
-          o=$(printf 'not json' | sh "$script"); rc=$?
+          o=$(printf 'not json' | "$interp" "$script"); rc=$?
           has "malformed -> 'claude'" "claude" "$o"
           [ "$rc" -eq 0 ] && { echo "  ok   exit 0 on malformed"; pass=$((pass+1)); } || { echo "  FAIL exit $rc"; fail=$((fail+1)); }
-          has "empty stdin -> 'claude'" "claude" "$(printf '' | sh "$script")"
+          has "empty stdin -> 'claude'" "claude" "$(printf '' | "$interp" "$script")"
 
           echo "Cost pill: estimated session cost at API rates"
           o=$(run '{"model":{"display_name":"Opus 4.8"},"context_window":{"used_percentage":5},"cost":{"total_cost_usd":12.999}}')
@@ -97,7 +101,7 @@ jobs:
   # ── statusline.ps1 ──────────────────────────────────────────────────
   psscriptanalyzer:
     name: PSScriptAnalyzer (statusline.ps1)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - name: Analyze
@@ -109,12 +113,9 @@ jobs:
           if ($issues | Where-Object Severity -eq 'Error') { throw "PSScriptAnalyzer reported errors" }
 
   ps-tests:
-    name: powershell tests
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    # statusline.ps1 is the Windows path; test it where it actually runs.
+    name: powershell tests (windows-latest)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - name: Run regression battery
