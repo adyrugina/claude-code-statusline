@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ── statusline.sh ───────────────────────────────────────────────────
+  shellcheck:
+    name: shellcheck (statusline.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck --shell=sh statusline.sh
+
+  shell-tests:
+    name: shell tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Ensure jq is available
+        shell: bash
+        run: |
+          if ! command -v jq >/dev/null; then
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              brew install jq
+            else
+              sudo apt-get update && sudo apt-get install -y jq
+            fi
+          fi
+      - name: Run regression battery
+        shell: bash
+        run: |
+          set -u
+          script=statusline.sh
+          pass=0; fail=0
+          run() { printf '%s' "$1" | sh "$script"; }
+          has()   { printf '%s' "$3" | grep -q "$2" && { echo "  ok   $1"; pass=$((pass+1)); } || { echo "  FAIL $1 -- want /$2/ in: $(printf '%s' "$3" | cat -v | head -c160)"; fail=$((fail+1)); }; }
+          hasnt() { printf '%s' "$3" | grep -q "$2" && { echo "  FAIL $1 -- unexpected /$2/"; fail=$((fail+1)); } || { echo "  ok   $1"; pass=$((pass+1)); }; }
+
+          echo "ROB-1: one bad field must not collapse the whole bar"
+          o=$(run '{"model":{"display_name":""},"context_window":{"used_percentage":5,"context_window_size":200000}}')
+          has "empty display_name -> 'unknown'" "unknown" "$o"
+          has "  ... still shows context %" "5%" "$o"
+          o=$(run '{"model":{"display_name":"Opus 4.8"},"context_window":{"used_percentage":"42"}}')
+          has "string used_percentage renders model" "opus" "$o"
+          has "  ... and rounds to 42%" "42%" "$o"
+
+          echo "SEC: control bytes are stripped (ESC/OSC built here, never pasted)"
+          # Proof is the BEL byte (0x07, never emitted by pill rendering) is
+          # gone - not the inert letters left behind once ESC/BEL are removed.
+          evil=$(jq -n --arg d "$(printf 'Op\033]0;HIJACK\007us 4.8')" '{model:{display_name:$d},context_window:{used_percentage:5,context_window_size:200000}}')
+          o=$(printf '%s' "$evil" | sh "$script")
+          bel=$(printf '\007')
+          case "$o" in
+            *"$bel"*) echo "  FAIL BEL control byte leaked"; fail=$((fail+1)) ;;
+            *)        echo "  ok   control bytes stripped (no BEL)"; pass=$((pass+1)) ;;
+          esac
+
+          echo "SEC: command injection stays blocked"
+          rm -f .marker
+          jq -n '{model:{display_name:"x $(touch .marker) `touch .marker`"},context_window:{used_percentage:5}}' | sh "$script" >/dev/null
+          [ -e .marker ] && { echo "  FAIL injection executed"; fail=$((fail+1)); rm -f .marker; } || { echo "  ok   injection blocked"; pass=$((pass+1)); }
+
+          echo "Fallback: malformed / empty -> one plain pill, exit 0"
+          o=$(printf 'not json' | sh "$script"); rc=$?
+          has "malformed -> 'claude'" "claude" "$o"
+          [ "$rc" -eq 0 ] && { echo "  ok   exit 0 on malformed"; pass=$((pass+1)); } || { echo "  FAIL exit $rc"; fail=$((fail+1)); }
+          has "empty stdin -> 'claude'" "claude" "$(printf '' | sh "$script")"
+
+          echo "Cost pill: estimated session cost at API rates"
+          o=$(run '{"model":{"display_name":"Opus 4.8"},"context_window":{"used_percentage":5},"cost":{"total_cost_usd":12.999}}')
+          has "12.999 rounds -> \$13.00" '\$13\.00' "$o"
+          o=$(run '{"model":{"display_name":"Opus 4.8"},"context_window":{"used_percentage":5}}')
+          hasnt "absent cost -> no \$ pill" '\$' "$o"
+
+          echo "Happy path: full four-pill line"
+          future=$(( $(date +%s) + 8100 ))
+          o=$(run '{"model":{"display_name":"Opus 4.8"},"effort":{"level":"xhigh"},"context_window":{"used_percentage":42.7,"context_window_size":1000000},"rate_limits":{"five_hour":{"used_percentage":63,"resets_at":'"$future"'}},"cost":{"total_cost_usd":1.2345}}')
+          has "model" "opus" "$o"
+          has "effort appended" "xhigh" "$o"
+          has "context rounded 42.7 -> 43%" "43%" "$o"
+          has "rate-limit %" "63%" "$o"
+          has "reset countdown (hours)" "2h" "$o"
+          has "cost pill 1.2345 -> \$1.23" '\$1\.23' "$o"
+
+          echo
+          echo "RESULT: $pass passed, $fail failed"
+          [ "$fail" -eq 0 ]
+
+  # ── statusline.ps1 ──────────────────────────────────────────────────
+  psscriptanalyzer:
+    name: PSScriptAnalyzer (statusline.ps1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Analyze
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+          $issues = Invoke-ScriptAnalyzer -Path statusline.ps1 -Severity Error,Warning
+          $issues | Format-Table -AutoSize
+          if ($issues | Where-Object Severity -eq 'Error') { throw "PSScriptAnalyzer reported errors" }
+
+  ps-tests:
+    name: powershell tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run regression battery
+        shell: pwsh
+        run: |
+          $fail = 0
+          # statusline.ps1 prints via Write-Host (information stream), so
+          # capture stream 6 (6>&1) or the output is invisible to the test
+          function Run($obj) { ($obj | ConvertTo-Json -Depth 9 -Compress) | & ./statusline.ps1 6>&1 | Out-String }
+          function Has($desc,$pat,$text)   { if ($text -match $pat) { "  ok   $desc" } else { "  FAIL $desc -- want /$pat/"; $script:fail++ } }
+          function Hasnt($desc,$pat,$text) { if ($text -match $pat) { "  FAIL $desc -- unexpected /$pat/"; $script:fail++ } else { "  ok   $desc" } }
+
+          "ROB-1: one bad field must not collapse the whole bar"
+          $o = Run @{ model=@{display_name=''}; context_window=@{used_percentage=5; context_window_size=200000} }
+          Has "empty display_name -> 'unknown'" 'unknown' $o
+          Has "  ... still shows context %" '5%' $o
+          $o = Run @{ model=@{display_name='Opus 4.8'}; context_window=@{used_percentage='42'} }
+          Has "string used_percentage renders model" 'opus' $o
+          Has "  ... and rounds to 42%" '42%' $o
+
+          "SEC: control bytes are stripped (BEL 0x07 must not survive)"
+          $esc = [char]27; $bel = [char]7
+          $o = Run @{ model=@{display_name=("Op{0}]0;HIJACK{1}us 4.8" -f $esc,$bel)}; context_window=@{used_percentage=5; context_window_size=200000} }
+          if ($o.Contains($bel) -or $o.Contains($esc + ']')) { "  FAIL control byte leaked"; $fail++ } else { "  ok   control bytes stripped" }
+
+          "Fallback: malformed -> one plain pill"
+          $o = 'not json' | & ./statusline.ps1 6>&1 | Out-String
+          Has "malformed -> 'claude'" 'claude' $o
+
+          "Cost pill: estimated session cost at API rates"
+          $o = Run @{ model=@{display_name='Opus 4.8'}; context_window=@{used_percentage=5}; cost=@{total_cost_usd=12.999} }
+          Has '12.999 rounds -> $13.00' '\$13\.00' $o
+          $o = Run @{ model=@{display_name='Opus 4.8'}; context_window=@{used_percentage=5} }
+          Hasnt 'absent cost -> no $ pill' '\$' $o
+
+          "Happy path: full four-pill line"
+          $future = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 8100
+          $o = Run @{ model=@{display_name='Opus 4.8'}; effort=@{level='xhigh'}; context_window=@{used_percentage=42.7; context_window_size=1000000}; rate_limits=@{five_hour=@{used_percentage=63; resets_at=$future}}; cost=@{total_cost_usd=1.2345} }
+          Has "model" 'opus' $o
+          Has "effort appended" 'xhigh' $o
+          Has "context rounded 42.7 -> 43%" '43%' $o
+          Has "rate-limit %" '63%' $o
+          Has "reset countdown (hours)" '2h' $o
+          Has 'cost pill 1.2345 -> $1.23' '\$1\.23' $o
+
+          ""
+          "RESULT: fail=$fail"
+          if ($fail -gt 0) { exit 1 }

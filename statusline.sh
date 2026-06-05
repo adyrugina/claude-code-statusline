@@ -25,41 +25,49 @@ pill() {
 }
 
 # ── Input parsing ─────────────────────────────────────────────────────
-# One jq pass extracts everything as six lines (blank line = field
-# absent). All numeric work happens in jq — `round` instead of shell
-# printf %.0f (which breaks under comma-decimal locales), and the reset
-# countdown via jq's `now` (epoch seconds, same unit as resets_at).
-# Exit status is checked because jq streams: a mid-program type error
-# could emit some lines and then die.
-vals=$(printf '%s' "$input" | jq -r '
-  ((.model.display_name // "unknown") | split(" ")[0] | ascii_downcase),
-  (.effort.level // ""),
-  (.context_window.used_percentage // 0 | round),
-  (.context_window.context_window_size // 200000),
-  (.rate_limits.five_hour.used_percentage | if . == null then "" else round end),
-  (.rate_limits.five_hour.resets_at | if . == null then "" else (. - now | floor) end),
-  (.cost.total_cost_usd | if . == null then "" else (. * 100 | round) end)
-' 2>/dev/null) || vals=""
+# One jq pass emits ready-to-eval shell assignments. Two jq helpers make
+# every field independently fault-tolerant, so a single weird value can
+# never collapse the whole bar (it used to: an empty display_name or a
+# string-typed used_percentage threw, and you got a bare "claude" pill):
+#   clean : strips C0 control bytes (U+0001-U+001F) from strings, so a
+#           model name carrying raw escape sequences can't retitle your
+#           window, clear the screen, or smuggle a hyperlink
+#   num   : coerces anything (null, number, numeric string) to a number,
+#           defaulting to 0 — `round` never sees a non-number again
+# String fields go through @sh, which shell-quotes them, so the eval below
+# is injection-safe; numeric fields are bare integers and need no quoting.
+# All numeric work stays in jq (round, the reset countdown via `now`, the
+# cost-to-cents conversion) to dodge locale-dependent shell printf rounding.
+assignments=$(printf '%s' "$input" | jq -r '
+  def clean: if type == "string" then gsub("[[:cntrl:]]"; "") else . end;
+  def num:   (tostring | tonumber? // 0);
+  "model="  + ((.model.display_name // "" | clean | split(" ")[0] // ""
+               | if . == "" then "unknown" else . end | ascii_downcase) | @sh) + " " +
+  "effort=" + ((.effort.level // "" | clean) | @sh) + " " +
+  "pct="    + (.context_window.used_percentage | num | round | tostring) + " " +
+  "window=" + (.context_window.context_window_size // 200000 | num | tostring) + " " +
+  "rpct="   + (.rate_limits.five_hour.used_percentage
+               | if . == null then "\"\"" else (num | round | tostring) end) + " " +
+  "rem="    + (.rate_limits.five_hour.resets_at
+               | if . == null then "\"\"" else ((num) - now | floor | tostring) end) + " " +
+  "cents="  + (.cost.total_cost_usd
+               | if . == null then "\"\"" else (num * 100 | round | tostring) end)
+' 2>/dev/null)
 
-# Bad/missing input, or no jq → one plain pill: never a blank bar,
-# never stderr spam, never a half-rendered line
-if [ -z "$vals" ]; then
+# Empty result = malformed input or no jq → one plain pill: never a blank
+# bar, never stderr spam, never a half-rendered line
+if [ -z "$assignments" ]; then
   pill "$PILL_BG" "$PILL_TEXT" "claude"
   printf '\n'
   exit 0
 fi
 
-{
-  read -r model
-  read -r effort
-  read -r pct
-  read -r window
-  read -r rpct
-  read -r rem
-  read -r cents
-} <<EOF
-$vals
-EOF
+# Declare defaults first: documents the contract, keeps the script sane if a
+# field is ever missing, and lets shellcheck see the vars the eval assigns.
+# Values are jq-quoted (strings via @sh, numbers as bare integers), so the
+# eval only ever assigns data — it can't execute it.
+model='' effort='' pct=0 window=200000 rpct='' rem='' cents=''
+eval "$assignments"
 
 # Keep the braces: bash 3.2 mis-parses $var glued to a multibyte char
 # (lead byte absorbed into the variable name) if the space is ever removed
