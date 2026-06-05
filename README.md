@@ -1,6 +1,6 @@
 # claude-code-statusline
 
-A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-code): active model and effort level, context window usage with dynamic colour thresholds, and rate limit usage with a live countdown to the next reset. Works on macOS, Linux, and Windows.
+A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-code): active model and effort level, context window usage with dynamic colour thresholds, rate limit usage with a live countdown to the next reset, and the estimated session cost at API rates. Works on macOS, Linux, and Windows.
 
 ## What it looks like
 
@@ -13,6 +13,7 @@ A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-
 | **Model** | Model name, lowercased (`opus`, `sonnet`), plus the effort level when set (`opus · high`) |
 | **Context** | Percentage of the context window in use — quiet grey by default, orange/red as it climbs |
 | **Rate limit** | ⏳ 5-hour window usage and time until the window resets (`1h29`, `45m`) — appears once rate limit data is available |
+| **Cost** | Estimated session cost at published API rates (`$1.23`) — on a subscription this is informational, never an actual charge |
 
 If the script receives bad input or `jq` is missing, it degrades to a single plain `claude` pill instead of a broken or blank bar.
 
@@ -127,6 +128,7 @@ Claude Code pipes a JSON object to the status line script via stdin on each upda
 - `context_window.context_window_size` — total window size in tokens, used to pick the colour thresholds
 - `rate_limits.five_hour.used_percentage` — 5-hour rolling rate limit usage
 - `rate_limits.five_hour.resets_at` — epoch timestamp of the next rate limit reset, turned into the countdown
+- `cost.total_cost_usd` — estimated session cost in USD, computed client-side by Claude Code from token counts at published API rates; resets each session and may differ from an actual bill
 
 The shell version does all parsing and arithmetic in a **single `jq` pass** — including rounding (avoids `printf %.0f`, which breaks under comma-decimal locales) and the reset countdown (via `jq`'s `now`). The pill caps are emitted as octal UTF-8 escapes so no editor or copy-paste step can strip them.
 
@@ -140,6 +142,7 @@ All knobs are at the top of each script:
 - **Context thresholds** — `warn` / `danger` values per window size
 - **Rate limit thresholds** — the `50` / `75` comparisons in the rate pill section
 - **Drop the rate pill** — remove the rate limit section if you don't need it
+- **Drop the cost pill** — remove the cost section if you don't need it
 
 ## License
 

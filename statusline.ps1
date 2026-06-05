@@ -108,7 +108,19 @@ if ($null -ne $rpct) {
     }
 }
 
-# Layout: three uniform pills - model . context % . rate limits
+# Estimated API cost pill: what the session would cost at API rates
+# (informational on a subscription - never an actual charge). Cost is
+# converted to integer cents and formatted with integer arithmetic so
+# the output stays invariant under comma-decimal cultures.
+$cost_str = ''
+$cost = $data.cost.total_cost_usd
+if ($null -ne $cost) {
+    $cents = [long][math]::Round([double]$cost * 100)
+    $cost_str = '${0}.{1:d2}' -f [long][math]::Floor($cents / 100), [int]($cents % 100)
+}
+
+# Layout: four uniform pills - model . context % . rate limits . est. cost
 $out = "$(Pill $PILL_BG $PILL_TEXT $model)  $(Pill $ctx_bg $ctx_fg "${pct}%")"
 if ($rate_str) { $out += "  $(Pill $rate_bg $rate_fg $rate_str)" }
+if ($cost_str) { $out += "  $(Pill $PILL_BG $PILL_TEXT $cost_str)" }
 Write-Host $out

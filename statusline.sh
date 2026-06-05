@@ -37,7 +37,8 @@ vals=$(printf '%s' "$input" | jq -r '
   (.context_window.used_percentage // 0 | round),
   (.context_window.context_window_size // 200000),
   (.rate_limits.five_hour.used_percentage | if . == null then "" else round end),
-  (.rate_limits.five_hour.resets_at | if . == null then "" else (. - now | floor) end)
+  (.rate_limits.five_hour.resets_at | if . == null then "" else (. - now | floor) end),
+  (.cost.total_cost_usd | if . == null then "" else (. * 100 | round) end)
 ' 2>/dev/null) || vals=""
 
 # Bad/missing input, or no jq → one plain pill: never a blank bar,
@@ -55,6 +56,7 @@ fi
   read -r window
   read -r rpct
   read -r rem
+  read -r cents
 } <<EOF
 $vals
 EOF
@@ -112,7 +114,17 @@ if [ -n "$rpct" ]; then
   fi
 fi
 
-# Layout: three uniform pills — model · context % · rate limits
+# Estimated API cost pill: what the session would cost at API rates
+# (informational on a subscription — never an actual charge). Cost comes
+# from jq as integer cents so the shell formats it with pure integer
+# arithmetic — no printf %f, which breaks under comma-decimal locales.
+cost_str=""
+if [ -n "$cents" ]; then
+  cost_str=$(printf '$%d.%02d' $(( cents / 100 )) $(( cents % 100 )))
+fi
+
+# Layout: four uniform pills — model · context % · rate limits · est. cost
 out="$(pill "$PILL_BG" "$PILL_TEXT" "$model")  $(pill "$ctx_bg" "$ctx_fg" "${pct}%")"
 [ -n "$rate_str" ] && out="$out  $(pill "$rate_bg" "$rate_fg" "$rate_str")"
+[ -n "$cost_str" ] && out="$out  $(pill "$PILL_BG" "$PILL_TEXT" "$cost_str")"
 printf '%s\n' "$out"
