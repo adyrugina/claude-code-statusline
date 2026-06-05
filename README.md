@@ -4,7 +4,7 @@ A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-
 
 ## What it looks like
 
-<img width="428*1.5" height="42*1.5" alt="image" src="https://github.com/user-attachments/assets/1c9a4ee8-ace1-4885-b6f2-876d08ccbb63" />
+<img width="642" height="63" alt="image" src="https://github.com/user-attachments/assets/1c9a4ee8-ace1-4885-b6f2-876d08ccbb63" />
 
 ```
 
