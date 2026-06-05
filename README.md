@@ -4,7 +4,8 @@ A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-
 
 ## What it looks like
 
-![Status line preview showing three pills: model with effort level, context usage, and rate limit with reset countdown](statusline-preview.png)
+<img width="428" height="42" alt="image" src="https://github.com/user-attachments/assets/1c9a4ee8-ace1-4885-b6f2-876d08ccbb63" />
+
 
 One line, three rounded pills:
 
