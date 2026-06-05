@@ -4,13 +4,8 @@ A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-
 
 ## What it looks like
 
-<img width="428" height="42" alt="image" src="https://github.com/user-attachments/assets/1c9a4ee8-ace1-4885-b6f2-876d08ccbb63" />
+<img width="428*2" height="42*2" alt="image" src="https://github.com/user-attachments/assets/1c9a4ee8-ace1-4885-b6f2-876d08ccbb63" />
 
-
-One line, three rounded pills:
-
-```
-( opus · high )  ( 22% )  ( ⏳61% · 1h29 )
 ```
 
 | Pill | Content |
