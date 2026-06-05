@@ -6,7 +6,6 @@ A Powerline-style "pill" status line for [Claude Code](https://claude.ai/claude-
 
 <img width="642" height="63" alt="image" src="https://github.com/user-attachments/assets/1c9a4ee8-ace1-4885-b6f2-876d08ccbb63" />
 
-```
 
 | Pill | Content |
 |---|---|
@@ -72,7 +71,6 @@ If the script receives bad input or `jq` is missing, it degrades to a single pla
        "refreshInterval": 60
      }
    }
-   ```
 
    If you already have a `settings.json`, just add the `"statusLine"` key to your existing object. `refreshInterval` (in seconds) re-runs the script once a minute so the reset countdown keeps ticking while the session is idle — without it, the status line only updates on message events.
 
